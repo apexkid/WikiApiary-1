@@ -38,17 +38,37 @@ class MediawikiTasks(BaseApiaryTask):
 
     def get_mwpagetitle(self, extension_name):
         """Return the corresponding page for the extension on mw.o"""
-        #To be modified to fetch by smw property
 
-        return extension_name
+        title = extension_name[extension_name.index(':') + 1 :]
+        try:
+            wiki_return = self.bumble_bee.call({
+                    'action': 'ask',
+                    'query': ''.join([
+                        "[[Category:Extension]]",
+                        "[[Name::%s]]" % title,
+                        "|?Has URL|?Has MediaWiki.org title"
+                        ])
+                    })
+            url = ((wiki_return['query']['results']).values()[0])['printouts']['Has URL']
+            mw_title = ((wiki_return['query']['results']).values()[0])['printouts']['Has MediaWiki.org title']
+        except Exception, e:
+            raise Exception("Error while querying for URL for extension %s (%s)." % (extension_name, e))
+
+        if mw_title:
+            return ("Extension:" + mw_title[0])
+        elif url and "www.mediawiki.org" in url[0]:
+            url = url[0]
+            return url[ url.rfind('/')+1 :]
+        else:
+            return -1
 
     def parse(self, title, wiki):
         """Function to parse MW page using mwparserfromhell"""
 
-        data = {"action": "query", "prop": "revisions", "rvlimit": 1,
-                "rvprop": "content", "format": "json", "titles": title}
+        data = {"action": "parse", "prop": "wikitext", "disablepp":1,
+                "format": "json", "page": title}
         wiki_return = wiki.call(data)
-        text = wiki_return["query"]["pages"].values()[0]["revisions"][0]["*"]
+        text = wiki_return['parse']['wikitext']['*']
         return mwparserfromhell.parse(text)
 
     def updatemediawiki(self, title, data):
@@ -67,24 +87,30 @@ class MediawikiTasks(BaseApiaryTask):
 
         return wiki_return
 
-    def run(self, extension_name):
+    def pushratings(self, extension_name):
         """Get rating information for an extension and write to mediawiki"""
 
         rating = self.get_rating(extension_name)
         mwtitle = self.get_mwpagetitle(extension_name)
 
+        if mwtitle == -1:
+            LOGGER.info("No valid Mediawiki URL found for extension %s", extension_name)
+            return 0
+
         data = self.parse(mwtitle, self.mworg_bee)
         for template in data.filter_templates():
             if template.name.matches(" "):
-            template.add("rating", rating)
+                template.add("rating", rating)
 
         #Update ratings inside extension template
         wiki_return = self.updatemediawiki(mwtitle, data)
 
+        return wiki_return
+
+    def run(self, extension_name):
+        """Execute tasks related to mediawiki.org"""
+
+        wiki_return = self.pushratings(extension_name)
         #Write code to fetch more data to mw.o in subpage
 
         return wiki_return
-
-    def generate_template(self, apiary_data):
-        """Build the block to add additional page to extensions for apiary data"""
-        return 0
