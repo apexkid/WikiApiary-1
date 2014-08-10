@@ -39,13 +39,11 @@ class MediawikiTasks(BaseApiaryTask):
     def get_mwpagetitle(self, extension_name):
         """Return the corresponding page for the extension on mw.o"""
 
-        title = extension_name[extension_name.index(':') + 1 :]
         try:
             wiki_return = self.bumble_bee.call({
                     'action': 'ask',
                     'query': ''.join([
-                        "[[Category:Extension]]",
-                        "[[Name::%s]]" % title,
+                        "[[%s]]" % extension_name,
                         "|?Has URL|?Has MediaWiki.org title"
                         ])
                     })
@@ -60,7 +58,7 @@ class MediawikiTasks(BaseApiaryTask):
             url = url[0]
             return url[ url.rfind('/')+1 :]
         else:
-            return -1
+            return None
 
     def parse(self, title, wiki):
         """Function to parse MW page using mwparserfromhell"""
@@ -93,9 +91,9 @@ class MediawikiTasks(BaseApiaryTask):
         rating = self.get_rating(extension_name)
         mwtitle = self.get_mwpagetitle(extension_name)
 
-        if mwtitle == -1:
+        if mwtitle is None:
             LOGGER.info("No valid Mediawiki URL found for extension %s", extension_name)
-            return 0
+            return None
 
         data = self.parse(mwtitle, self.mworg_bee)
         for template in data.filter_templates():
